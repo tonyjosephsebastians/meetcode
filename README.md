@@ -43,11 +43,11 @@ flowchart TB
 ```mermaid
 flowchart LR
   subgraph Browser[MeetCode SPA]
-    UI[React UI\n(ProblemList, ProblemPage, Report)]
+    UI[React UI <br/>(ProblemList, ProblemPage, Report)]
     Store[Zustand + LocalStorage]
     Editor[Monaco Editor]
-    Worker[WebWorker Runner\n(JS/TS)]
-    LC[LangChain.js Client\n(OpenAI API)]
+    Worker[WebWorker Runner <br/>(JS/TS)]
+    LC[LangChain.js Client <br/>(OpenAI API)]
   end
 
   UI --> Store
@@ -57,6 +57,7 @@ flowchart LR
   Store <--> LS[(localStorage)]
 
   LC -->|HTTPS| OpenAI[(OpenAI API)]
+
 ```
 
 - **No backend** — all AI and execution runs in the browser.
