@@ -42,21 +42,21 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-  subgraph Browser[MeetCode SPA]
-    UI[React UI <br/>(ProblemList, ProblemPage, Report)]
-    Store[Zustand + LocalStorage]
-    Editor[Monaco Editor]
-    Worker[WebWorker Runner <br/>(JS/TS)]
-    LC[LangChain.js Client <br/>(OpenAI API)]
+  subgraph Browser["MeetCode SPA"]
+    UI["React UI (ProblemList, ProblemPage, Report)"]
+    Store["Zustand + LocalStorage"]
+    Editor["Monaco Editor"]
+    Worker["WebWorker Runner (JS/TS)"]
+    LC["LangChain.js Client (OpenAI API)"]
   end
 
   UI --> Store
   UI --> Editor
   UI <--> Worker
   UI <--> LC
-  Store <--> LS[(localStorage)]
+  Store <--> LS["localStorage"]
 
-  LC -->|HTTPS| OpenAI[(OpenAI API)]
+  LC -->|HTTPS| OpenAI["OpenAI API"]
 
 ```
 
