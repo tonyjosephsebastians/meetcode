@@ -1,38 +1,146 @@
+/// <reference lib="webworker" />
 
-function deepEqual(a:any,b:any):boolean{
-  if(Object.is(a,b))return true
-  if(typeof a!==typeof b)return false
-  if(a&&b&&typeof a==='object'){
-    if(Array.isArray(a)!==Array.isArray(b))return false
-    if(Array.isArray(a)){
-      if(a.length!==(b as any).length)return false
-      for(let i=0;i<a.length;i++)if(!deepEqual(a[i],(b as any)[i]))return false
-      return true
-    }else{
-      const ak=Object.keys(a),bk=Object.keys(b as any)
-      if(ak.length!==bk.length)return false
-      for(const k of ak)if(!deepEqual(a[k],(b as any)[k]))return false
-      return true
+import type { EvalResult, TestCase, TestResult } from '../types'
+
+interface WorkerRequest {
+  code: string
+  tests: TestCase[]
+  timeoutMs: number
+}
+
+interface WorkerResponse {
+  ok: boolean
+  result?: EvalResult
+  error?: string
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true
+  if (typeof a !== typeof b) return false
+  if (typeof a !== 'object' || a === null || b === null) {
+    return false
+  }
+
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i += 1) {
+      if (!deepEqual(a[i], b[i])) {
+        return false
+      }
+    }
+    return true
+  }
+
+  const keysA = Object.keys(a as Record<string, unknown>)
+  const keysB = Object.keys(b as Record<string, unknown>)
+  if (keysA.length !== keysB.length) return false
+  for (const key of keysA) {
+    if (!deepEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])) {
+      return false
     }
   }
-  return false
+  return true
 }
-self.onmessage=async(e:MessageEvent)=>{
-  const {code,tests}=e.data as {code:string;tests:any[]}
-  try{
-    const fnFactory=new Function(`${code}; return typeof solution!=='undefined'?solution:null;`)
-    const solution=fnFactory()
-    if(typeof solution!=='function'){self.postMessage({ok:true,payload:{passed:0,total:tests.length,details:[],verdict:'RUNTIME_ERROR'}});return}
-    let passed=0;const details:any[]=[];const t0=performance.now()
-    for(const t of tests){
-      const start=performance.now();let status:'pass'|'fail'|'error'='error';let info
-      try{
-        const result=await Promise.race([Promise.resolve().then(()=>solution(...t.input)),new Promise((_,rej)=>setTimeout(()=>rej(new Error('TLE')),1000))])
-        if(deepEqual(result,t.output)){status='pass';passed++}else{status='fail';info=JSON.stringify({expected:t.output,actual:result})}
-      }catch(err:any){status='error';info=String(err?.message||err)}
-      const runtimeMs=performance.now()-start;details.push({name:t.name,status,info,runtimeMs})
+
+function execute(code: string): unknown {
+  const exports: Record<string, unknown> = {}
+  const module = { exports }
+  const fn = new Function('exports', 'module', code)
+  fn(exports, module)
+  return module.exports
+}
+
+function ensureSolution(exports: unknown) {
+  if (typeof exports === 'function') return exports
+  if (exports && typeof exports === 'object') {
+    const maybeFn = (exports as Record<string, unknown>).solution
+    if (typeof maybeFn === 'function') {
+      return maybeFn
     }
-    const verdict=passed===tests.length?'ACCEPTED':'WRONG_ANSWER'
-    self.postMessage({ok:true,payload:{passed,total:tests.length,details,verdict,runtimeMs:performance.now()-t0}})
-  }catch(err){self.postMessage({ok:false,error:String(err)})}
+  }
+  throw new Error('Export a function named "solution".')
+}
+
+function computeVerdict(passed: number, total: number, details: TestResult[]): EvalResult['verdict'] {
+  if (details.some((item) => item.status === 'error')) {
+    return 'RUNTIME_ERROR'
+  }
+  if (passed === total) {
+    return 'ACCEPTED'
+  }
+  return 'WRONG_ANSWER'
+}
+
+async function runTest(
+  solution: (...args: unknown[]) => unknown,
+  test: TestCase,
+  timeoutMs: number,
+): Promise<TestResult> {
+  const start = performance.now()
+  let status: TestResult['status'] = 'pass'
+  let info: string | undefined
+
+  let cancelTimeout: (() => void) | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    const id = setTimeout(() => {
+      reject(new Error(`Timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+    cancelTimeout = () => clearTimeout(id)
+  })
+
+  try {
+    const maybeResult = (solution as (...args: unknown[]) => unknown)(...test.input)
+    const resolved = await Promise.race([Promise.resolve(maybeResult), timeout])
+    if (!deepEqual(resolved, test.output)) {
+      status = 'fail'
+      info = `Expected ${JSON.stringify(test.output)}, received ${JSON.stringify(resolved)}`
+    }
+  } catch (error) {
+    status = 'error'
+    info = error instanceof Error ? error.message : String(error)
+  } finally {
+    cancelTimeout?.()
+  }
+
+  const runtimeMs = Math.round(performance.now() - start)
+  return { name: test.name, status, info, runtimeMs }
+}
+
+self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
+  const { code, tests, timeoutMs } = event.data
+  const response: WorkerResponse = { ok: false }
+
+  try {
+    const exports = execute(code)
+    const solution = ensureSolution(exports) as (...args: unknown[]) => unknown
+
+    const details: TestResult[] = []
+    let passed = 0
+    let totalRuntime = 0
+
+    for (const test of tests) {
+      const result = await runTest(solution, test, timeoutMs)
+      details.push(result)
+      totalRuntime += result.runtimeMs
+      if (result.status === 'pass') {
+        passed += 1
+      }
+    }
+
+    const evalResult: EvalResult = {
+      passed,
+      total: tests.length,
+      details,
+      verdict: computeVerdict(passed, tests.length, details),
+      runtimeMs: Math.round(totalRuntime),
+    }
+
+    response.ok = true
+    response.result = evalResult
+  } catch (error) {
+    response.ok = false
+    response.error = error instanceof Error ? error.message : String(error)
+  }
+
+  self.postMessage(response)
 }
