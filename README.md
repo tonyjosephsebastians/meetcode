@@ -1,7 +1,7 @@
 
 # MeetCode — Generative AI Code Learning App
 
-> A **frontend-only**, LeetCode-style practice app powered by **Generative AI**.  
+> A  LeetCode-style practice app powered by **Generative AI**.  
 > Learn algorithms and data structures with **AI-generated problems, hints, and personalized coaching reports**.  
 > Built with **React + TypeScript + Vite**, **Monaco Editor**, **WebWorker test runner**, and **LangChain.js** (in-browser).
 
@@ -12,7 +12,6 @@
 ## ✨ Features
 
 - 🎯 **LeetCode-style UI** → Problems list, detail page, Monaco editor, tests, hints.
-- ⚡ **Frontend-only** → Easy to host (Vercel, Netlify, GitHub Pages).
 - 🧑‍💻 **Monaco Editor** with TypeScript/JavaScript.
 - 🔒 **Safe code execution** in browser using **WebWorkers** (JS/TS only).
 - 🤖 **AI in-browser (LangChain.js)**:
@@ -183,18 +182,7 @@ npm run dev
 
 Visit [http://localhost:5173](http://localhost:5173).
 
----
 
-## 🌐 Deployment
-
-- **Vercel / Netlify** → import repo, defaults work.
-- **GitHub Pages**:
-  ```bash
-  npm run build
-  npm run deploy
-  ```
-
----
 
 ## 📊 Roadmap
 
